@@ -18,6 +18,9 @@ func NewRouter(st *store.Store) *gin.Engine {
 	router.POST("/api/v1/tasks", createTaskHandler(st))
 	router.GET("/api/v1/tasks/:id", getTaskHandler(st))
 
+	router.POST("/api/v1/runs", createRunHandler(st))
+	router.GET("/api/v1/runs/:runId", getRunHandler(st))
+
 	router.GET("/healthz", func(c *gin.Context) {
 		if err := st.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "storage_unavailable", "message": "database is not available"}})

@@ -67,6 +67,31 @@ go run .
 {"error":{"code":"storage_unavailable","message":"database is not available"}}
 ```
 
+### `POST /api/v1/runs`
+
+为已登记任务触发一次新的批处理运行。请求体是只含 `taskId` 的 JSON 对象：
+
+```json
+{"taskId":"report"}
+```
+
+创建成功返回 HTTP 201，同一任务可重复触发，每次生成不同的非空 `runId`。响应只含四个字段：
+
+```json
+{"runId":"…","targetTaskId":"report","status":"queued","tasks":[{"taskId":"extract","workflow":"nightly","status":"pending","attempts":0,"artifact":null}]}
+```
+
+- `status`：运行状态，新建时恒为 `queued`。
+- `targetTaskId`：与请求中的 `taskId` 一致。
+- `tasks`：目标任务及其全部传递依赖的节点快照，按可执行拓扑顺序排列；目标任务排在所有依赖之后，同时就绪的节点按 `taskId` 升序。依赖重复项与登记时的书写顺序不改变节点集合和顺序。
+- 每个节点含 `taskId`、`workflow`、`status`、`attempts`、`artifact`，初始值依次为任务编号、登记的工作流、`pending`、`0`、`null`。
+
+运行主记录与全部节点快照在一个事务内写入：查询要么看到完整运行，要么得到不存在的结果。
+
+### `GET /api/v1/runs/{runId}`
+
+以 HTTP 200 返回该运行创建时保存的完整快照（与 POST 响应的四个字段一致）。查询不改变状态，也不重新计算依赖。
+
 ## 错误约定
 
 所有错误响应都是单个顶层 `error` 对象，包含 `code` 与 `message` 两个字符串字段；`message` 不包含 SQL、堆栈或文件路径。
@@ -80,3 +105,6 @@ go run .
 | `dependency_cycle` | 400 | 依赖成环（含任务依赖自身） |
 | `task_conflict` | 409 | 编号已被不同内容的任务占用 |
 | `task_not_found` | 404 | 查询的任务编号未登记 |
+| `run_not_found` | 404 | 查询的运行编号不存在 |
+
+运行入口在请求体不是单个 JSON 对象，或 `taskId` 缺失、不是字符串、为空时返回 400 `validation_error`；`taskId` 无对应任务时返回 404 `task_not_found`。

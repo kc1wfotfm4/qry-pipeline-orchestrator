@@ -116,15 +116,9 @@ func getError(err error) *requestError {
 // parseTaskPayload decodes and validates the registration body. Every field
 // must be present with the documented type.
 func parseTaskPayload(body io.Reader) (taskPayload, *requestError) {
-	decoder := json.NewDecoder(body)
-	decoder.UseNumber()
-
-	var raw map[string]interface{}
-	if err := decoder.Decode(&raw); err != nil || raw == nil {
-		return taskPayload{}, validationError("request body must be a JSON object")
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return taskPayload{}, validationError("request body must contain a single JSON object")
+	raw, requestErr := decodeSingleObject(body)
+	if requestErr != nil {
+		return taskPayload{}, requestErr
 	}
 
 	id, requestErr := requiredString(raw, "id")
@@ -145,6 +139,22 @@ func parseTaskPayload(body io.Reader) (taskPayload, *requestError) {
 	}
 
 	return taskPayload{ID: id, Workflow: workflow, DependsOn: dependsOn, MaxRetries: maxRetries}, nil
+}
+
+// decodeSingleObject reads exactly one JSON object and rejects trailing
+// tokens, arrays, scalars, and null.
+func decodeSingleObject(body io.Reader) (map[string]interface{}, *requestError) {
+	decoder := json.NewDecoder(body)
+	decoder.UseNumber()
+
+	var raw map[string]interface{}
+	if err := decoder.Decode(&raw); err != nil || raw == nil {
+		return nil, validationError("request body must be a JSON object")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, validationError("request body must contain a single JSON object")
+	}
+	return raw, nil
 }
 
 func requiredString(raw map[string]interface{}, field string) (string, *requestError) {
