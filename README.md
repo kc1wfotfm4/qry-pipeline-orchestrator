@@ -53,6 +53,39 @@ go run .
 {"error":{"code":"task_not_found","message":"task is not registered"}}
 ```
 
+### `POST /api/v1/runs`
+
+为一个已登记任务触发一次新的批处理运行。请求体是只含 `taskId` 的 JSON 对象：
+
+```json
+{"taskId":"report"}
+```
+
+成功返回 HTTP 201。每次请求都会创建一次独立运行，`runId` 为非空且互不相同；同一任务可重复触发。响应只含 `runId`、`targetTaskId`、`status`、`tasks` 四个字段：
+
+```json
+{"runId":"...","targetTaskId":"report","status":"queued","tasks":[{"taskId":"extract","workflow":"nightly","status":"pending","attempts":0,"artifact":null}]}
+```
+
+- `status` 初始固定为 `queued`，`targetTaskId` 与请求的 `taskId` 一致。
+- `tasks` 是目标任务及其全部传递依赖的节点快照，按可执行拓扑顺序排列：每个依赖排在它的后继之前，目标任务排在最后；多个节点同时就绪时按 `taskId` 升序。依赖列表中的重复项与任务的登记书写顺序都不改变节点集合和顺序。
+- 每个节点只含 `taskId`、`workflow`、`status`、`attempts`、`artifact`，初始值依次为任务编号、登记时的工作流名称、`pending`、`0`、`null`。
+- 运行主记录与全部节点快照在同一个数据库事务内写入，查询只能看到完整运行或完全看不到该运行。
+
+请求体不是单个 JSON 对象，或 `taskId` 缺失、不是字符串、为空字符串时返回 HTTP 400 的 `validation_error`；`taskId` 没有对应任务时返回 HTTP 404：
+
+```json
+{"error":{"code":"task_not_found","message":"task is not registered"}}
+```
+
+### `GET /api/v1/runs/{runId}`
+
+返回 HTTP 200 与创建时完全一致的运行快照。查询不改变任何状态，也不重新计算依赖。运行不存在时返回 HTTP 404：
+
+```json
+{"error":{"code":"run_not_found","message":"run is not found"}}
+```
+
 ### `GET /healthz`
 
 返回服务与存储状态。正常时 HTTP 200：
@@ -80,3 +113,4 @@ go run .
 | `dependency_cycle` | 400 | 依赖成环（含任务依赖自身） |
 | `task_conflict` | 409 | 编号已被不同内容的任务占用 |
 | `task_not_found` | 404 | 查询的任务编号未登记 |
+| `run_not_found` | 404 | 查询的运行编号不存在 |

@@ -59,9 +59,17 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("enable wal: %w", err)
 	}
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
+	}
+	if _, err := db.Exec(runsSchema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply runs schema: %w", err)
 	}
 	return &Store{db: db}, nil
 }
